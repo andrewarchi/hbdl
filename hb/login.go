@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 )
@@ -14,11 +15,12 @@ import (
 var (
 	ErrNoCSRFCookie  = errors.New("csrf_cookie not found")
 	ErrGuardRequired = errors.New("guard required: enter the code sent to your email address to verify your account")
-	ErrGuardInvalid  = errors.New("guard invalid: the code provided is invalid")
+	ErrGuardInvalid  = errors.New("guard invalid: the provided code is invalid")
 )
 
 // Login signs into an account with username (email), password, and
-// guard. The guard 2FA code is sent to your email address.
+// guard. The guard 2FA code is sent to your email address when guard is
+// empty.
 func (c *Client) Login(username, password, guard string) error {
 	csrf, err := c.getCSRF()
 	if err != nil {
@@ -67,7 +69,7 @@ func (c *Client) Login(username, password, guard string) error {
 	return nil
 }
 
-var hbURL = &url.URL{Scheme: "https", Host: "humblebundle.com"}
+var wwwURL = &url.URL{Scheme: "https", Host: "www.humblebundle.com"}
 
 func (c *Client) getCSRF() (string, error) {
 	if c.csrf != "" {
@@ -84,7 +86,7 @@ func (c *Client) getCSRF() (string, error) {
 	}
 	resp.Body.Close()
 
-	for _, cookie := range c.c.Jar.Cookies(hbURL) {
+	for _, cookie := range c.c.Jar.Cookies(wwwURL) {
 		if cookie.Name == "csrf_cookie" {
 			c.csrf = cookie.Value
 			return cookie.Value, nil
@@ -120,4 +122,27 @@ func (err LoginError) Error() string {
 		}
 	}
 	return b.String()
+}
+
+// LoadCookies reads cookies from a file and adds them to the client.
+func (c *Client) LoadCookies(cookieFile string) error {
+	f, err := os.Open(cookieFile)
+	if err != nil {
+		return err
+	}
+	var cookies []*http.Cookie
+	if err := json.NewDecoder(f).Decode(&cookies); err != nil {
+		return err
+	}
+	c.c.Jar.SetCookies(wwwURL, cookies)
+	return nil
+}
+
+// SaveCookies writes the client's cookies to a file.
+func (c *Client) SaveCookies(cookieFile string) error {
+	f, err := os.Create(cookieFile)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(f).Encode(c.c.Jar.Cookies(wwwURL))
 }
