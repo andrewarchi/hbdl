@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -68,21 +65,4 @@ func findNode(node *html.Node, matches func(*html.Node) bool) *html.Node {
 		}
 	}
 	return nil
-}
-
-func (c *Client) GetOrder(gamekey string) (*http.Response, error) {
-	url := fmt.Sprintf("https://www.humblebundle.com/api/v1/order/%s?all_tpkds=true&wallet_data=true", gamekey)
-	resp, err := c.c.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	f, err := os.Create(fmt.Sprintf("order_%s.json", gamekey))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return nil, err
-	}
-	return nil, nil
 }
