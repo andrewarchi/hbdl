@@ -10,19 +10,19 @@ import (
 	"strings"
 )
 
-// Errors from API
+// Login-related errors:
 var (
-	ErrNoCSRFCookie  = errors.New("cookie not found: csrf_cookie")
+	ErrNoCSRFCookie  = errors.New("csrf_cookie not found")
 	ErrGuardRequired = errors.New("guard required: enter the code sent to your email address to verify your account")
-	ErrGuardInvalid  = errors.New("guard invalid: check the code sent to your email address")
+	ErrGuardInvalid  = errors.New("guard invalid: the code provided is invalid")
 )
 
 // Login signs into an account with username (email), password, and
 // guard. The guard 2FA code is sent to your email address.
-func (c *Client) Login(username, password, guard string) (*http.Response, error) {
+func (c *Client) Login(username, password, guard string) error {
 	csrf, err := c.getCSRF()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	form := url.Values{
@@ -37,14 +37,14 @@ func (c *Client) Login(username, password, guard string) (*http.Response, error)
 	fr := strings.NewReader(form.Encode())
 	req, err := http.NewRequest("POST", "https://www.humblebundle.com/processlogin", fr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("CSRF-Prevention-Token", csrf)
 
 	resp, err := c.c.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -55,16 +55,16 @@ func (c *Client) Login(username, password, guard string) (*http.Response, error)
 		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
 			switch {
 			case data.GuardRequired && guard != "":
-				return nil, ErrGuardInvalid
+				return ErrGuardInvalid
 			case data.GuardRequired:
-				return nil, ErrGuardRequired
+				return ErrGuardRequired
 			case data.Errors != nil:
-				return nil, LoginError(data.Errors)
+				return LoginError(data.Errors)
 			}
 		}
-		return nil, fmt.Errorf("login: status %s", resp.Status)
+		return fmt.Errorf("login: status %s", resp.Status)
 	}
-	return resp, nil
+	return nil
 }
 
 var hbURL = &url.URL{Scheme: "https", Host: "humblebundle.com"}
