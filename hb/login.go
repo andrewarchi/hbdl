@@ -19,10 +19,20 @@ var (
 	ErrGuardInvalid  = errors.New("guard invalid: the provided code is invalid")
 )
 
-// Login signs into an account with username (email), password, and
-// guard. The guard 2FA code is sent to your email address when guard is
-// empty.
+// Login signs into an account with username (email), password, and a
+// guard code sent to your email address. When the guard code is empty,
+// an email will be sent.
 func (c *Client) Login(username, password, guard string) error {
+	return c.login(username, password, guard, "")
+}
+
+// Login2FA signs into an account with username (email), password, and
+// a 2FA code from an authenticator app.
+func (c *Client) Login2FA(username, password, code string) error {
+	return c.login(username, password, "", code)
+}
+
+func (c *Client) login(username, password, guard, code string) error {
 	csrf, err := c.getCSRF()
 	if err != nil {
 		return err
@@ -32,6 +42,7 @@ func (c *Client) Login(username, password, guard string) error {
 		"username":                 {username},
 		"password":                 {password},
 		"guard":                    {guard},
+		"code":                     {code},
 		"access_token":             {""},
 		"access_token_provider_id": {""},
 		"goto":                     {"/"},
