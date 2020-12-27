@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Login-related errors:
@@ -130,9 +131,13 @@ func (c *Client) LoadCookies(cookieFile string) error {
 	if err != nil {
 		return err
 	}
-	var cookies []*http.Cookie
-	if err := json.NewDecoder(f).Decode(&cookies); err != nil {
+	var jsonCookies []*jsonCookie
+	if err := json.NewDecoder(f).Decode(&jsonCookies); err != nil {
 		return err
+	}
+	cookies := make([]*http.Cookie, len(jsonCookies))
+	for i, c := range jsonCookies {
+		cookies[i] = (*http.Cookie)(c)
 	}
 	c.c.Jar.SetCookies(wwwURL, cookies)
 	return nil
@@ -144,5 +149,26 @@ func (c *Client) SaveCookies(cookieFile string) error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(f).Encode(c.c.Jar.Cookies(wwwURL))
+	cookies := c.c.Jar.Cookies(wwwURL)
+	jsonCookies := make([]*jsonCookie, len(cookies))
+	for i, c := range cookies {
+		jsonCookies[i] = (*jsonCookie)(c)
+	}
+	return json.NewEncoder(f).Encode(jsonCookies)
+}
+
+// jsonCookie adds json tags to http.Cookie
+type jsonCookie struct {
+	Name       string        `json:"name,omitempty"`
+	Value      string        `json:"value,omitempty"`
+	Path       string        `json:"path,omitempty"`
+	Domain     string        `json:"domain,omitempty"`
+	Expires    time.Time     `json:"expires,omitempty"`
+	RawExpires string        `json:"raw_expires,omitempty"`
+	MaxAge     int           `json:"max_age,omitempty"`
+	Secure     bool          `json:"secure,omitempty"`
+	HttpOnly   bool          `json:"http_only,omitempty"`
+	SameSite   http.SameSite `json:"same_site,omitempty"`
+	Raw        string        `json:"raw,omitempty"`
+	Unparsed   []string      `json:"unparsed,omitempty"`
 }
