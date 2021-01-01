@@ -17,12 +17,21 @@ var (
 	ErrNoCSRFCookie  = errors.New("csrf_cookie not found")
 	ErrGuardRequired = errors.New("guard required: enter the code sent to your email address to verify your account")
 	ErrGuardInvalid  = errors.New("guard invalid: the provided code is invalid")
+	Err2FARequired   = errors.New("code required: enter the code from your two-factor authenticator to verify your account")
+	Err2FAInvalid    = errors.New("code invalid: the provided two-factor code is invalid")
+	ErrLoginFailed   = errors.New("login failed")
 )
 
-// Login signs into an account with username (email), password, and a
-// guard code sent to your email address. When the guard code is empty,
-// an email will be sent.
-func (c *Client) Login(username, password, guard string) error {
+// Login signs into an account with username (email) and password. A
+// guard code or 2FA code is required.
+func (c *Client) Login(username, password string) error {
+	return c.login(username, password, "", "")
+}
+
+// LoginGuard signs into an account with username (email), password, and
+// a guard code sent to your email address. When the guard code is
+// empty, an email will be sent.
+func (c *Client) LoginGuard(username, password, guard string) error {
 	return c.login(username, password, guard, "")
 }
 
@@ -63,17 +72,28 @@ func (c *Client) login(username, password, guard, code string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var data struct {
-			GuardRequired bool                `json:"humble_guard_required"`
-			Errors        map[string][]string `json:"errors"`
+			GuardRequired     bool                `json:"humble_guard_required"`
+			TwoFactorRequired bool                `json:"two_factor_required"`
+			TwoFactorType     string              `json:"twofactor_type"` // "google"
+			Errors            map[string][]string `json:"errors"`
+			Success           bool                `json:"success"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
 			switch {
-			case data.GuardRequired && guard != "":
-				return ErrGuardInvalid
 			case data.GuardRequired:
-				return ErrGuardRequired
+				if guard == "" {
+					return ErrGuardRequired
+				}
+				return ErrGuardInvalid
+			case data.TwoFactorRequired:
+				if code == "" {
+					return Err2FARequired
+				}
+				return Err2FAInvalid
 			case data.Errors != nil:
 				return LoginError(data.Errors)
+			case !data.Success:
+				return ErrLoginFailed
 			}
 		}
 		return fmt.Errorf("login: status %s", resp.Status)
@@ -93,10 +113,10 @@ func (c *Client) getCSRF() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return "", fmt.Errorf("csrf: status %s", resp.Status)
 	}
-	resp.Body.Close()
 
 	for _, cookie := range c.c.Jar.Cookies(wwwURL) {
 		if cookie.Name == "csrf_cookie" {
